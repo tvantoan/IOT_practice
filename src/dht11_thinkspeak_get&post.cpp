@@ -24,13 +24,13 @@ void setup()
   dht.begin();
 
   WiFi.begin(ssid, password);
-  Serial.print("Dang ket noi WiFi");
+  Serial.print("Connecting WiFi");
   while (WiFi.status() != WL_CONNECTED)
   {
     delay(500);
     Serial.print(".");
   }
-  Serial.println("\nDa ket noi WiFi!");
+  Serial.println("\nWiFi connected!");
 }
 
 void loop()
@@ -42,13 +42,13 @@ void loop()
 
   if (isnan(h) || isnan(t))
   {
-    Serial.println("Doc DHT that bai!");
+    Serial.println("Read DHT data failed!");
     return;
   }
 
-  Serial.print("Nhiet do: ");
+  Serial.print("Temp: ");
   Serial.print(t);
-  Serial.print(" °C | Do am: ");
+  Serial.print(" °C | Humi: ");
   Serial.print(h);
   Serial.println(" %");
 
@@ -63,11 +63,11 @@ void loop()
     if (httpCode > 0)
     {
       String payload = http.getString();
-      Serial.println("Server tra ve: " + payload);
+      Serial.println("Server response: " + payload);
     }
     else
     {
-      Serial.println("Loi GET: " + String(httpCode));
+      Serial.println("GET failed: " + String(httpCode));
     }
     http.end();
 
@@ -78,11 +78,11 @@ void loop()
     if (httpCode > 0)
     {
       String payload = http.getString();
-      Serial.println("Server tra ve: " + payload);
+      Serial.println("Server response: " + payload);
     }
     else
     {
-      Serial.println("Loi POST: " + String(httpCode));
+      Serial.println("POST failed: " + String(httpCode));
     }
     http.end();
   }

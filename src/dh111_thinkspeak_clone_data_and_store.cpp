@@ -5,8 +5,8 @@
 
 Preferences prefs;
 
-const char *ssid = "wifi-name";
-const char *password = "wifi-password";
+const char *ssid = "LG";
+const char *password = "11111112";
 
 const char *server = "https://api.thingspeak.com/channels/3071884/feeds.json?api_key=CTM1JI0M3H9PWML5&results=2";
 
@@ -17,17 +17,17 @@ void setup()
   prefs.begin("my-app", false);
 
   WiFi.begin(ssid, password);
-  Serial.print("Dang ket noi WiFi");
+  Serial.print("Connecting WiFi");
   while (WiFi.status() != WL_CONNECTED)
   {
     delay(500);
     Serial.print(".");
   }
-  Serial.println("\nWiFi da ket noi!");
+  Serial.println("\nWiFi connected!");
 
   String lastTemp = prefs.getString("lastTemp", "0");
   String lastHum = prefs.getString("lastHum", "0");
-  Serial.println("Gia tri cu da luu: Temp=" + lastTemp + " | Hum=" + lastHum);
+  Serial.println("Last value: Temp=" + lastTemp + " | Hum=" + lastHum);
 }
 
 void loop()
@@ -41,14 +41,14 @@ void loop()
     if (httpCode > 0)
     {
       String payload = http.getString();
-      Serial.println("Du lieu nhan ve: " + payload);
+      Serial.println("Data received: " + payload);
 
       DynamicJsonDocument doc(4096);
       DeserializationError err = deserializeJson(doc, payload);
 
       if (err)
       {
-        Serial.print("Loi JSON: ");
+        Serial.print("JSON error: ");
         Serial.println(err.c_str());
         return;
       }
@@ -61,11 +61,11 @@ void loop()
         const char *field1 = feed["field1"];
         const char *field2 = feed["field2"];
 
-        Serial.print("Thoi gian: ");
+        Serial.print("Time: ");
         Serial.print(time);
-        Serial.print(" | Nhiet do: ");
+        Serial.print(" | Temp: ");
         Serial.print(field1);
-        Serial.print(" | Do am: ");
+        Serial.print(" | Humi: ");
         Serial.println(field2);
 
         prefs.putString("lastTemp", String(field1));
@@ -74,11 +74,11 @@ void loop()
 
       String savedTemp = prefs.getString("lastTemp", "0");
       String savedHum = prefs.getString("lastHum", "0");
-      Serial.println("Da luu xuong flash: Temp=" + savedTemp + " | Hum=" + savedHum);
+      Serial.println("Flash writed: Temp=" + savedTemp + " | Hum=" + savedHum);
     }
     else
     {
-      Serial.println("Loi GET: " + String(httpCode));
+      Serial.println("GET failed: " + String(httpCode));
     }
     http.end();
   }

@@ -5,10 +5,12 @@
 #define DHTPIN 15
 #define DHTTYPE DHT11
 
-const char *ssid = "Tầng5";
+// Thông tin WiFi
+const char *ssid = "Tầng 5";
 const char *password = "ANH12345678";
 
-const char *mqtt_server = "192.168.0.103";
+// Thông tin MQTT Broker (máy anh chạy Mosquitto)
+const char *mqtt_server = "192.168.0.103"; // IP máy tính của anh trong LAN
 const int mqtt_port = 1883;
 
 WiFiClient espClient;
@@ -37,12 +39,14 @@ void setup_wifi()
 
 void reconnect()
 {
+  // Lặp đến khi kết nối lại được broker
   while (!client.connected())
   {
     Serial.print("Attempting MQTT connection...");
     if (client.connect("ESP32Client"))
     {
       Serial.println("connected");
+      // Có thể subscribe topic tại đây nếu cần
       client.subscribe("test/topic");
     }
     else
@@ -86,7 +90,7 @@ void loop()
   Serial.print("Publishing message: ");
   Serial.println(payload);
 
-  client.publish("home/room1/dht", payload);
+  client.publish("home/room1/dht", payload); // publish lên topic này
 
   delay(5000);
 }
