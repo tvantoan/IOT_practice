@@ -18,11 +18,11 @@ const float OFF_THRESH = 0.06;
 float gx = 0, gy = 0, gz = 0;
 bool gravityInit = false;
 
-// Buffer trượt
+// Lưu cửa sổ trượt cho dynamicSquare
 float buf[WINDOW_SIZE];
 int bufIndex = 0;
 int bufCount = 0;
-double sumSq = 0.0; // double cho an toàn số học
+double sumSq = 0.0;
 
 int batchCount = 0;
 bool ledState = false;
@@ -54,7 +54,7 @@ void loop()
   float ay = e.acceleration.y;
   float az = e.acceleration.z;
 
-  // Khởi tạo gravity
+  // Khởi tạo trọng lực
   if (!gravityInit)
   {
     gx = ax;
@@ -63,12 +63,12 @@ void loop()
     gravityInit = true;
   }
 
-  // Low-pass gravity
+  // Low-pass gravity (Bộ lọc thông thấp lấy phần trọng lực)
   gx = ALPHA_GRAV * gx + (1 - ALPHA_GRAV) * ax;
   gy = ALPHA_GRAV * gy + (1 - ALPHA_GRAV) * ay;
   gz = ALPHA_GRAV * gz + (1 - ALPHA_GRAV) * az;
 
-  // Dynamic part
+  // Trừ phần trọng lực để lấy phần động
   float dx = ax - gx;
   float dy = ay - gy;
   float dz = az - gz;
@@ -83,10 +83,6 @@ void loop()
   // Serial.print(az, 6);
   // Serial.print(",");
   // Serial.println(dynSq, 6);
-  if (dynSq < 0.011477)
-  {
-    dynSq = 0.0; // lọc nhiễu nhỏ
-  }
   // Cập nhật running sum
   if (bufCount < WINDOW_SIZE)
   {
@@ -96,14 +92,15 @@ void loop()
   }
   else
   {
-    sumSq -= buf[bufIndex]; // trừ mẫu cũ
+    // Sau khi đủ window_size thì cửa số trượt
+    sumSq -= buf[bufIndex];
     buf[bufIndex] = dynSq;
-    sumSq += dynSq; // cộng mẫu mới
+    sumSq += dynSq;
   }
 
   bufIndex = (bufIndex + 1) % WINDOW_SIZE;
 
-  // In RMS định kỳ
+  // In RMS định kỳ (hiện tại là 1 giây 1 lần, tức 10 lần đo dynSq sẽ in ra 1 lần RMS)
   batchCount++;
   if (batchCount >= BATCH_PRINT && bufCount > 0)
   {
@@ -126,9 +123,8 @@ void loop()
 
     batchCount = 0;
   }
-
+  // Delay cứng , ví dụ delay(100) thì vòng lặp sẽ lâu hơn 100ms do còn tính toán ở trên. phải trừ phần thời gian tính toán.
   long wait = (1000 / SAMPLE_HZ) - (millis() - start);
   if (wait > 0)
     delay(wait);
-  // delay(2000);
 }
