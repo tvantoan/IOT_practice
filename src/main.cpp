@@ -1,92 +1,134 @@
-#include <WiFi.h>
-#include <PubSubClient.h>
-#include <DHT.h>
+#include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_ADXL345_U.h>
+#include <Arduino.h>
 
-#define DHTPIN 15
-#define DHTTYPE DHT11
+#define LED_PIN 2
 
-const char *ssid = "Tầng5";
-const char *password = "ANH12345678";
+Adafruit_ADXL345_Unified accel = Adafruit_ADXL345_Unified(12345);
 
-const char *mqtt_server = "192.168.0.103";
-const int mqtt_port = 1883;
+// Cấu hình
+const int SAMPLE_HZ = 10;
+const int WINDOW_SIZE = 100;
+const int BATCH_PRINT = 10;
+const float ALPHA_GRAV = 0.98;
+const float ON_THRESH = 0.08;
+const float OFF_THRESH = 0.06;
 
-WiFiClient espClient;
-PubSubClient client(espClient);
-DHT dht(DHTPIN, DHTTYPE);
+float gx = 0, gy = 0, gz = 0;
+bool gravityInit = false;
 
-void setup_wifi()
-{
-  delay(10);
-  Serial.println();
-  Serial.print("Connecting to ");
-  Serial.println(ssid);
+// Buffer trượt
+float buf[WINDOW_SIZE];
+int bufIndex = 0;
+int bufCount = 0;
+double sumSq = 0.0; // double cho an toàn số học
 
-  WiFi.begin(ssid, password);
-
-  while (WiFi.status() != WL_CONNECTED)
-  {
-    delay(500);
-    Serial.print(".");
-  }
-
-  Serial.println("\nWiFi connected");
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
-}
-
-void reconnect()
-{
-  while (!client.connected())
-  {
-    Serial.print("Attempting MQTT connection...");
-    if (client.connect("ESP32Client"))
-    {
-      Serial.println("connected");
-      client.subscribe("test/topic");
-    }
-    else
-    {
-      Serial.print("failed, rc=");
-      Serial.print(client.state());
-      Serial.println(" try again in 5 seconds");
-      delay(5000);
-    }
-  }
-}
+int batchCount = 0;
+bool ledState = false;
 
 void setup()
 {
   Serial.begin(115200);
-  dht.begin();
-  setup_wifi();
-  client.setServer(mqtt_server, mqtt_port);
+  pinMode(LED_PIN, OUTPUT);
+  Wire.begin();
+
+  if (!accel.begin())
+  {
+    Serial.println("ADXL345 not found!");
+    while (1)
+      ;
+  }
+  accel.setRange(ADXL345_RANGE_2_G);
+  Serial.println("Running RMS measurement...");
 }
 
 void loop()
 {
-  if (!client.connected())
+  unsigned long start = millis();
+
+  sensors_event_t e;
+  accel.getEvent(&e);
+
+  float ax = e.acceleration.x;
+  float ay = e.acceleration.y;
+  float az = e.acceleration.z;
+
+  // Khởi tạo gravity
+  if (!gravityInit)
   {
-    reconnect();
+    gx = ax;
+    gy = ay;
+    gz = az;
+    gravityInit = true;
   }
-  client.loop();
 
-  float h = dht.readHumidity();
-  float t = dht.readTemperature();
+  // Low-pass gravity
+  gx = ALPHA_GRAV * gx + (1 - ALPHA_GRAV) * ax;
+  gy = ALPHA_GRAV * gy + (1 - ALPHA_GRAV) * ay;
+  gz = ALPHA_GRAV * gz + (1 - ALPHA_GRAV) * az;
 
-  if (isnan(h) || isnan(t))
+  // Dynamic part
+  float dx = ax - gx;
+  float dy = ay - gy;
+  float dz = az - gz;
+  float dynSq = dx * dx + dy * dy + dz * dz;
+
+  // Debug chi tiết
+  // Serial.print("ax: ");
+  // Serial.print(ax, 6);
+  // Serial.print(",");
+  // Serial.print(ay, 6);
+  // Serial.print(",");
+  // Serial.print(az, 6);
+  // Serial.print(",");
+  // Serial.println(dynSq, 6);
+  if (dynSq < 0.011477)
   {
-    Serial.println("Failed to read from DHT sensor!");
-    return;
+    dynSq = 0.0; // lọc nhiễu nhỏ
+  }
+  // Cập nhật running sum
+  if (bufCount < WINDOW_SIZE)
+  {
+    buf[bufIndex] = dynSq;
+    sumSq += dynSq;
+    bufCount++;
+  }
+  else
+  {
+    sumSq -= buf[bufIndex]; // trừ mẫu cũ
+    buf[bufIndex] = dynSq;
+    sumSq += dynSq; // cộng mẫu mới
   }
 
-  char payload[50];
-  snprintf(payload, sizeof(payload), "Temp: %.2f °C, Hum: %.2f %%", t, h);
+  bufIndex = (bufIndex + 1) % WINDOW_SIZE;
 
-  Serial.print("Publishing message: ");
-  Serial.println(payload);
+  // In RMS định kỳ
+  batchCount++;
+  if (batchCount >= BATCH_PRINT && bufCount > 0)
+  {
+    float rms = sqrt(sumSq / bufCount);
 
-  client.publish("home/room1/dht", payload);
+    // Serial.print("RMS(g): ");
+    Serial.println(rms, 6);
 
-  delay(5000);
+    // Logic bật tắt LED với hysteresis
+    if (!ledState && rms > ON_THRESH)
+    {
+      ledState = true;
+      digitalWrite(LED_PIN, HIGH);
+    }
+    else if (ledState && rms < OFF_THRESH)
+    {
+      ledState = false;
+      digitalWrite(LED_PIN, LOW);
+    }
+
+    batchCount = 0;
+  }
+
+  long wait = (1000 / SAMPLE_HZ) - (millis() - start);
+  if (wait > 0)
+    delay(wait);
+  // delay(2000);
 }
